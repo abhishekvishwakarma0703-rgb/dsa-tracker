@@ -1,0 +1,290 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142.1 76.2% 36.3%;
+    --success-foreground: 355.7 100% 97.3%;
+    --warning: 32.1 94.6% 44%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.6rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 7%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 144.9 80.4% 10%;
+    --warning: 32.1 94.6% 55%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted) / 0.5) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+}
+
+/* ── LeetCode HTML content styling ─────────────────────────────── */
+.leetcode-content p {
+  @apply text-sm text-foreground leading-relaxed mb-3;
+}
+.leetcode-content pre {
+  @apply bg-muted rounded-lg p-4 text-xs font-mono overflow-auto my-3 border;
+}
+.leetcode-content code {
+  @apply font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary;
+}
+.leetcode-content pre code {
+  @apply bg-transparent p-0 text-foreground;
+}
+.leetcode-content ul, .leetcode-content ol {
+  @apply text-sm pl-5 mb-3 space-y-1;
+}
+.leetcode-content ul { @apply list-disc; }
+.leetcode-content ol { @apply list-decimal; }
+.leetcode-content li { @apply text-foreground leading-relaxed; }
+.leetcode-content strong, .leetcode-content b { @apply font-semibold text-foreground; }
+.leetcode-content em { @apply italic; }
+.leetcode-content sup { @apply text-xs align-super; }
+.leetcode-content img { @apply rounded-lg max-w-full my-2; }
+.leetcode-content .example-block,
+.leetcode-content [class*="example"] {
+  @apply bg-muted/50 border rounded-lg p-3 my-3 text-xs font-mono;
+}
+.leetcode-content .constraints { @apply mt-4; }
+
+/* Code editor textarea */
+.code-textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  tab-size: 2;
+}
+
+/* Smooth section expand */
+.section-expand {
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Rich Text Editor — .rte-content
+   Applied to both the editable <div> and view-mode rendered HTML.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Placeholder text via CSS attr */
+.rte-content[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
+/* Block elements */
+.rte-content p        { margin-bottom: 0.4em; line-height: 1.65; }
+.rte-content div      { line-height: 1.65; }
+.rte-content h2       { font-size: 1.05rem; font-weight: 700; margin: 0.75em 0 0.25em; }
+.rte-content h3       { font-size: 0.95rem; font-weight: 600; margin: 0.6em 0 0.2em; }
+
+/* Lists */
+.rte-content ul,
+.rte-content ol       { padding-left: 1.4em !important; margin: 0.4em 0 !important; }
+.rte-content ul       { list-style-type: disc !important; }
+.rte-content ol       { list-style-type: decimal !important; }
+.rte-content li       { display: list-item !important; margin-bottom: 0.2em; line-height: 1.6; }
+.rte-content li > ul,
+.rte-content li > ol  { margin-top: 0.2em; }
+
+/* Blockquote */
+.rte-content blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.5);
+  padding: 0.35em 0.85em;
+  margin: 0.6em 0;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+/* Links */
+.rte-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+.rte-content a:hover { opacity: 0.8; }
+
+/* Inline formatting */
+.rte-content strong,
+.rte-content b        { font-weight: 600; }
+.rte-content em,
+.rte-content i        { font-style: italic; }
+.rte-content u        { text-decoration: underline; text-underline-offset: 2px; }
+.rte-content s,
+.rte-content strike   { text-decoration: line-through; }
+
+/* Horizontal rule */
+.rte-content hr       { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.75em 0; }
+
+/* Code */
+.rte-content code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  background: hsl(var(--muted));
+  padding: 0.1em 0.35em;
+  border-radius: 0.25em;
+}
+
+/* Remove bottom margin from the very last element */
+.rte-content > *:last-child { margin-bottom: 0; }
+
+/* ── insight-html (card view mode) ─────────────────────────────────────────── */
+.insight-html h2          { font-size: 1rem; font-weight: 700; margin: 0.6em 0 0.2em; }
+.insight-html h3          { font-size: 0.9rem; font-weight: 600; margin: 0.5em 0 0.15em; }
+.insight-html p,
+.insight-html div         { margin-bottom: 0.3em; line-height: 1.6; }
+.insight-html ul          { list-style: disc !important; padding-left: 1.3em !important; margin: 0.3em 0 !important; }
+.insight-html ol          { list-style: decimal !important; padding-left: 1.3em !important; margin: 0.3em 0 !important; }
+.insight-html li          { display: list-item !important; margin-bottom: 0.15em; line-height: 1.6; }
+.insight-html blockquote  { border-left: 3px solid hsl(var(--primary) / 0.4); padding: 0.3em 0.8em; margin: 0.5em 0; color: hsl(var(--muted-foreground)); font-style: italic; background: hsl(var(--muted) / 0.3); border-radius: 0 4px 4px 0; }
+.insight-html a           { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+.insight-html a:hover     { opacity: 0.8; }
+.insight-html strong,
+.insight-html b           { font-weight: 600; }
+.insight-html em,
+.insight-html i           { font-style: italic; }
+.insight-html u           { text-decoration: underline; text-underline-offset: 2px; }
+.insight-html hr          { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.5em 0; }
+.insight-html code        { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; background: hsl(var(--muted)); padding: 0.1em 0.3em; border-radius: 3px; }
+.insight-html > *:last-child { margin-bottom: 0; }
+
+/* ── rich-text-content (modal editor area + InsightItem view mode) ─────────────
+   Used by: RichTextEditor editable div + InsightItem dangerouslySetInnerHTML
+   Tailwind preflight resets list-style to none — !important overrides it.
+   ──────────────────────────────────────────────────────────────────────────── */
+.rich-text-content[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
+.rich-text-content p,
+.rich-text-content div      { margin-bottom: 0.4em; line-height: 1.65; }
+.rich-text-content h2       { font-size: 1.05rem; font-weight: 700; margin: 0.75em 0 0.25em; }
+.rich-text-content h3       { font-size: 0.95rem; font-weight: 600; margin: 0.6em 0 0.2em; }
+
+.rich-text-content ul,
+.rich-text-content ol       { padding-left: 1.4em !important; margin: 0.4em 0 !important; }
+.rich-text-content ul       { list-style-type: disc !important; }
+.rich-text-content ol       { list-style-type: decimal !important; }
+.rich-text-content li       { display: list-item !important; margin-bottom: 0.2em; line-height: 1.6; }
+.rich-text-content li > ul,
+.rich-text-content li > ol  { margin-top: 0.2em; }
+
+.rich-text-content blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.5);
+  padding: 0.35em 0.85em;
+  margin: 0.6em 0;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.rich-text-content a        { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+.rich-text-content a:hover  { opacity: 0.8; }
+
+.rich-text-content strong,
+.rich-text-content b        { font-weight: 600; }
+.rich-text-content em,
+.rich-text-content i        { font-style: italic; }
+.rich-text-content u        { text-decoration: underline; text-underline-offset: 2px; }
+.rich-text-content s,
+.rich-text-content strike   { text-decoration: line-through; }
+
+.rich-text-content hr       { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.75em 0; }
+
+.rich-text-content code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  background: hsl(var(--muted));
+  padding: 0.1em 0.35em;
+  border-radius: 0.25em;
+}
+
+.rich-text-content > *:last-child { margin-bottom: 0; }

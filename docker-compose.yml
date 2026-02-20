@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: dsa_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend-input:/app
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./dsa_tracker.db
+      - DEBUG=true
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: dsa_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    restart: unless-stopped
