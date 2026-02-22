@@ -1,12 +1,11 @@
 # FastAPI & ASGI Server
-# NOTE: Use plain uvicorn (not uvicorn[standard]) to avoid httptools null-byte
-# bug on Windows (httptools has a known corrupt install issue on Windows)
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic>=2.5.0
 pydantic-settings
 
 # Database
+uvicorn
 sqlalchemy
 aiosqlite
 alembic
@@ -21,28 +20,38 @@ PyJWT
 email-validator
 pydantic[email]
 
-# HTTP Client (for fetching LeetCode data)
-httpx
-
-# LLM Integration (Optional)
-# openai
-# anthropic
-
+# LLM Integration (Optional - for AI features)
+openai
+asyncpg
+anthropic
 # Async & Concurrency
 aiofiles==23.2.1
 anyio==3.7.1
 
+# Code Execution
+# Already using subprocess (built-in) for safe code execution
+
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
+httpx==0.25.2
 
-# Logging
+# Logging & Monitoring
 python-json-logger==2.0.7
 
-# Dev tools (optional)
-# black==23.12.1
-# flake8==6.1.0
-# mypy==1.7.1
+# Development
+black==23.12.1
+flake8==6.1.0
+mypy==1.7.1
+isort==5.13.2
 
-# LeetCode cache
+# Production
+gunicorn==21.2.0
+
+# LeetCode cache feature (new)
 beautifulsoup4>=4.12.0
+python-dotenv
+pydantic
+pydantic-settings
+httpx
+requests

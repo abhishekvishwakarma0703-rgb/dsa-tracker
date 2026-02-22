@@ -3,9 +3,7 @@ import { useProblems } from '@/context/ProblemsContext';
 import { ProblemSection } from '@/components/ProblemSection';
 import { ProblemDetailModal } from '@/components/ProblemDetailModal';
 import { CodeEditor } from '@/components/CodeEditor';
-import { AddFromMasterModal } from '@/components/AddFromMasterModal';
 import { Progress } from '@/components/ui/progress';
-import { CircularProgress } from '@/components/ui/circular-progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import {
   Search, X, CheckCircle2, RotateCcw, BookOpen, TrendingUp,
-  Filter, Sun, Moon, AlertCircle, RefreshCw, Plus
+  Filter, Sun, Moon, AlertCircle, RefreshCw
 } from 'lucide-react';
 
 function StatsCard({ icon: Icon, label, value, sub, className }) {
@@ -49,10 +47,9 @@ function LoadingSkeleton() {
 }
 
 export function ProblemsPage() {
-  const { problems, filters, setFilters, selectedProblem, setSelectedProblem, loading, error, refetchProblems } = useProblems();
+  const { problems, filters, setFilters, selectedProblem, setSelectedProblem, loading, error } = useProblems();
   const [searchTerm, setSearchTerm] = useState('');
   const [solveMode, setSolveMode] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 
   const toggleTheme = () => {
@@ -99,9 +96,9 @@ export function ProblemsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Sidebar + Main Layout */}
       <div className="flex h-screen overflow-hidden">
-
-        {/* ── Sidebar ── */}
+        {/* Sidebar */}
         <aside className="w-64 shrink-0 border-r bg-card flex flex-col hidden lg:flex">
           {/* Logo */}
           <div className="px-6 py-5 border-b">
@@ -117,14 +114,18 @@ export function ProblemsPage() {
           </div>
 
           {/* Progress Summary */}
-          <div className="px-5 py-5 border-b">
-            <CircularProgress
-              value={stats.progress}
-              size={130}
-              strokeWidth={11}
-              sublabel="Progress"
-              className="mx-auto mb-4"
-            />
+          <div className="px-5 py-5 border-b space-y-4">
+            <div>
+              <div className="flex justify-between text-xs mb-2">
+                <span className="text-muted-foreground">Overall Progress</span>
+                <span className="font-semibold">{stats.progress}%</span>
+              </div>
+              <Progress
+                value={stats.progress}
+                className="h-2"
+                indicatorClassName={stats.progress === 100 ? 'bg-success' : 'bg-primary'}
+              />
+            </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg bg-muted/60 p-2">
                 <div className="text-base font-bold">{stats.total}</div>
@@ -195,15 +196,8 @@ export function ProblemsPage() {
             </div>
           </div>
 
-          {/* Sidebar Footer — Add Problem + Theme */}
-          <div className="px-5 py-4 border-t space-y-2">
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Add Problem
-            </button>
+          {/* Footer */}
+          <div className="px-5 py-4 border-t">
             <button
               onClick={toggleTheme}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
@@ -216,7 +210,7 @@ export function ProblemsPage() {
           </div>
         </aside>
 
-        {/* ── Main Content ── */}
+        {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Topbar */}
           <header className="shrink-0 border-b bg-card px-6 py-3.5 flex items-center gap-4">
@@ -238,7 +232,7 @@ export function ProblemsPage() {
               )}
             </div>
 
-            {/* Mobile filters */}
+            {/* Mobile difficulty filter */}
             <div className="flex items-center gap-2 lg:hidden">
               <select
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -254,13 +248,6 @@ export function ProblemsPage() {
               >
                 {['All', 'Done', 'Revision', 'Pending'].map(s => <option key={s}>{s}</option>)}
               </select>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="h-9 flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Add
-              </button>
             </div>
 
             {hasFilters && (
@@ -274,7 +261,7 @@ export function ProblemsPage() {
           {/* Content */}
           <ScrollArea className="flex-1">
             <main className="p-6 max-w-4xl mx-auto">
-              {/* Mobile stats */}
+              {/* Stats row (mobile/no sidebar) */}
               <div className="grid grid-cols-2 gap-3 mb-6 lg:hidden">
                 <StatsCard icon={BookOpen} label="Total" value={stats.total} />
                 <StatsCard icon={CheckCircle2} label="Completed" value={stats.done} />
@@ -282,7 +269,7 @@ export function ProblemsPage() {
                 <StatsCard icon={TrendingUp} label="Progress" value={`${stats.progress}%`} />
               </div>
 
-              {/* Active filter badges */}
+              {/* Filter active badges */}
               {hasFilters && (
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -312,7 +299,7 @@ export function ProblemsPage() {
                 </div>
               )}
 
-              {/* Problem list */}
+              {/* Content */}
               {loading ? (
                 <LoadingSkeleton />
               ) : error ? (
@@ -361,7 +348,7 @@ export function ProblemsPage() {
         </div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* Problem Detail Modal */}
       {selectedProblem && !solveMode && (
         <ProblemDetailModal
           problem={selectedProblem}
@@ -369,25 +356,15 @@ export function ProblemsPage() {
           onSolve={() => setSolveMode(true)}
         />
       )}
-      
-      {selectedProblem && solveMode && (
-        <div className="fixed inset-0 z-50 bg-background overflow-auto">
-          <CodeEditor
-            problem={selectedProblem}
-            onBack={() => {
-              setSolveMode(false);
-              setSelectedProblem(null);
-            }}
-          />
-        </div>
-      )}
 
-      {showAddModal && (
-        <AddFromMasterModal
-          open={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          sections={problems}
-          onAdded={() => { refetchProblems?.(); setShowAddModal(false); }}
+      {/* Code Editor */}
+      {selectedProblem && solveMode && (
+        <CodeEditor
+          problem={selectedProblem}
+          onBack={() => {
+            setSolveMode(false);
+            setSelectedProblem(null);
+          }}
         />
       )}
     </div>

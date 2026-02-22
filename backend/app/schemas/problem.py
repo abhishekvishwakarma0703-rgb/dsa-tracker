@@ -1,173 +1,234 @@
 """
-Pydantic Schemas
+Pydantic schemas for request/response validation
 """
-from pydantic import BaseModel, Field
-from typing import Optional, List, Any
+
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+# --- 1. SHARED & UTILITY SCHEMAS ---
 
-# ─── Tag Schemas ─────────────────────────────────────────────
-class TagBase(BaseModel):
+class TestCaseSchema(BaseModel):
+    input: Any
+    expected: Any
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class PaginationSchema(BaseModel):
+    page: int = Field(1, ge=1)
+    page_size: int = Field(20, ge=1, le=100)
+
+class SuccessResponseSchema(BaseModel):
+    success: bool = True
+    data: Any
+    message: Optional[str] = None
+
+class ErrorResponseSchema(BaseModel):
+    success: bool = False
+    error: str
+    details: Optional[Dict[str, Any]] = None
+
+# --- 2. TAG SCHEMAS ---
+
+class TagCreateSchema(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    color: str = Field(default="#3b82f6")
+
+class TagUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+class TagResponseSchema(BaseModel):
+    id: str
     name: str
+    color: str
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
-class TagCreate(TagBase):
-    pass
+# --- 3. INSIGHT (NOTE) SCHEMAS ---
 
-class TagUpdate(TagBase):
-    pass
+class InsightCreateSchema(BaseModel):
+    text: str = Field(..., min_length=1, max_length=50000)
+    insight_type: str = "general"
 
-class TagResponse(TagBase):
-    id: int
-    created_at: Optional[datetime] = None
-    model_config = {"from_attributes": True}
-
-
-# ─── Note/Insight Schemas ─────────────────────────────────────
-class NoteBase(BaseModel):
-    text: str
-    insight_type: str = "note"
-
-class NoteCreate(NoteBase):
-    pass
-
-class NoteUpdate(BaseModel):
+class InsightUpdateSchema(BaseModel):
     text: Optional[str] = None
     insight_type: Optional[str] = None
 
-class NoteResponse(NoteBase):
-    id: int
-    problem_id: int
-    user_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    model_config = {"from_attributes": True}
+class InsightResponseSchema(BaseModel):
+    id: str
+    text: str
+    insight_type: str
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
+# --- 4. PROBLEM & SOLUTION DATA SCHEMAS ---
 
-# ─── Problem Schemas ─────────────────────────────────────────
-class ProblemBase(BaseModel):
+class SolutionDataSchema(BaseModel):
+    approach: Optional[str] = None
+    key_points: Optional[List[str]] = None
+    code: Optional[str] = None
+    complexity: Optional[Dict[str, str]] = None
+    tradeoffs: Optional[List[str]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ProblemCreateSchema(BaseModel):
     title: str
-    difficulty: str = "Medium"
+    description: Optional[str] = None
+    difficulty: str
     category: Optional[str] = None
-    section_id: Optional[str] = None
     pattern: Optional[str] = None
-    leetcode_id: Optional[str] = None
-    leetcode_slug: Optional[str] = None
+    section_id: Optional[str] = None
+    solution_data: Optional[SolutionDataSchema] = None
+    test_cases: Optional[List[TestCaseSchema]] = None
 
-class ProblemCreate(ProblemBase):
-    pass
-
-class ProblemUpdate(BaseModel):
+class ProblemUpdateSchema(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     difficulty: Optional[str] = None
     category: Optional[str] = None
-    section_id: Optional[str] = None
     pattern: Optional[str] = None
-    leetcode_id: Optional[str] = None
-    leetcode_slug: Optional[str] = None
-
-class ProblemResponse(ProblemBase):
-    id: int
-    is_done: bool = False
-    is_revision: bool = False
-    acceptance_rate: Optional[float] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    tags: List[TagResponse] = []
-    notes: List[NoteResponse] = []
-
-    # Aliases for frontend compatibility
-    @property
-    def done(self) -> bool:
-        return self.is_done
-
-    @property
-    def revision(self) -> bool:
-        return self.is_revision
-
-    @property
-    def insights(self) -> List[NoteResponse]:
-        return self.notes
-
-    model_config = {"from_attributes": True}
-
-
-class ProblemListResponse(BaseModel):
-    """Flat list item with frontend-compatible field names"""
-    id: int
-    title: str
-    difficulty: str
-    category: Optional[str] = None
-    section_id: Optional[str] = None
-    pattern: Optional[str] = None
-    leetcode_id: Optional[str] = None
-    leetcode_slug: Optional[str] = None
-    is_done: bool = False
-    is_revision: bool = False
+    solution_data: Optional[SolutionDataSchema] = None
+    test_cases: Optional[List[TestCaseSchema]] = None
+    # User progress fields
     done: bool = False
     revision: bool = False
-    acceptance_rate: Optional[float] = None
-    tags: List[TagResponse] = []
-    notes: List[NoteResponse] = []
-    insights: List[NoteResponse] = []
-    model_config = {"from_attributes": True}
+    views: int = 0
 
+    model_config = ConfigDict(from_attributes=True)
 
-# ─── Solution Schemas ─────────────────────────────────────────
-class SolutionSubmit(BaseModel):
+class ProblemResponseSchema(BaseModel):
+    id: str
+    title: str
+    leetcode_id: Optional[str] = None
+    description: Optional[str] = None
+    difficulty: str
+    category: Optional[str] = None
+    pattern: Optional[str] = None
+    solution_data: Optional[SolutionDataSchema] = None
+    test_cases: Optional[List[TestCaseSchema]] = None
+    created_at: datetime
+    updated_at: datetime
+    # User progress fields
+    done: bool = False
+    revision: bool = False
+    views: int = 0
+    # Relationships
+    tags: List[TagResponseSchema] = []
+    notes: List[InsightResponseSchema] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# --- 5. USER SCHEMAS ---
+
+class UserCreateSchema(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    full_name: Optional[str] = None
+
+class UserResponseSchema(BaseModel):
+    id: str
+    username: str
+    email: str
+    full_name: Optional[str]
+    is_active: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# --- 6. SOLUTION EXECUTION SCHEMAS ---
+
+class SolutionSubmitSchema(BaseModel):
+    code: str = Field(..., max_length=10000)
+    language: str = "javascript"
+    explanation: Optional[str] = None
+    approach: Optional[str] = None
+    time_complexity: Optional[str] = None
+    space_complexity: Optional[str] = None
+
+class SolutionTestSchema(BaseModel):
     code: str
-    language: str = "python3"
-    user_id: Optional[str] = "demo-user"
-    explanation: Optional[str] = ""
+    test_cases: List[TestCaseSchema]
+    language: str = "javascript"
+    timeout: int = 5
 
-class SolutionTest(BaseModel):
-    code: str
-    language: str = "python3"
-
-class SolutionResponse(BaseModel):
-    id: int
-    problem_id: int
+class SolutionResponseSchema(BaseModel):
+    id: str
+    problem_id: str
     code: str
     language: str
-    is_correct: Optional[bool] = None
-    runtime_ms: Optional[float] = None
-    test_results: Optional[Any] = None
-    created_at: Optional[datetime] = None
-    model_config = {"from_attributes": True}
+    explanation: Optional[str] = None
+    passed_test_cases: int = 0
+    total_test_cases: int = 0
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
+# --- 7. USER PROGRESS SCHEMAS ---
 
-# ─── LeetCode Master Schemas ──────────────────────────────────
-class LeetCodeMasterResponse(BaseModel):
-    id: int
-    question_id: str
-    title: str
-    title_slug: str
-    difficulty: str
-    ac_rate: Optional[float] = None
-    is_paid_only: bool = False
-    topic_tags: Optional[List[Any]] = []
-    category_title: Optional[str] = None
-    model_config = {"from_attributes": True}
+class UserProblemStatsSchema(BaseModel):
+    total_problems: int
+    completed_problems: int
+    revision_problems: int
+    progress_percentage: float
 
+class UserProblemResponseSchema(BaseModel):
+    problem_id: str
+    is_done: bool
+    is_revision: bool
+    views: int
+    first_attempted_at: Optional[datetime] = None
+    last_attempted_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
 
-# ─── Whiteboard Schemas ───────────────────────────────────────
-class WhiteboardSave(BaseModel):
-    canvas_data: Any
+# --- 8. AI / LLM INTEGRATION SCHEMAS ---
 
-class WhiteboardResponse(BaseModel):
-    id: int
-    problem_id: int
-    canvas_data: Optional[Any] = None
-    updated_at: Optional[datetime] = None
-    model_config = {"from_attributes": True}
+class CodeAnalysisRequestSchema(BaseModel):
+    code: str
+    language: str
+    problem_description: str
+    test_cases: Optional[List[TestCaseSchema]] = None
 
+class CodeAnalysisResponseSchema(BaseModel):
+    score: int  # 0-100
+    feedback: str
+    improvements: List[str]
+    optimizations: Optional[List[str]] = None
+    complexity_analysis: Optional[str] = None
 
-# ─── Misc ─────────────────────────────────────────────────────
-class MarkDone(BaseModel):
-    user_id: Optional[str] = "demo-user"
+class HintRequestSchema(BaseModel):
+    problem_id: str
+    difficulty_level: str = "medium"  # easy, medium, hard
 
-class AddTagBody(BaseModel):
-    tag_id: int
+class HintResponseSchema(BaseModel):
+    hint: str
+    approach_hint: Optional[str] = None
+    code_snippet: Optional[str] = None
 
-class InsightCreate(BaseModel):
-    text: str
-    insight_type: str = "note"
+# --- FINAL REBUILD ---
+ProblemResponseSchema.model_rebuild()
+
+# ---------------------------------------------------------------------------
+# NEW: LeetCode cache response schema
+# ---------------------------------------------------------------------------
+class LeetCodeCacheResponseSchema(BaseModel):
+    id:                str
+    slug:              str
+    title:             str
+    difficulty:        Optional[str]       = None
+    tags:              List[str]           = []
+    description:       Optional[str]       = None
+    raw_html:          Optional[str]       = None
+    examples:          List[Dict[str, Any]]= []
+    starter_code:      Optional[str]       = None
+    code_snippets:     List[Dict[str, Any]]= []
+    example_testcases: Optional[str]       = None
+    created_at:        datetime
+
+    model_config = ConfigDict(from_attributes=True)

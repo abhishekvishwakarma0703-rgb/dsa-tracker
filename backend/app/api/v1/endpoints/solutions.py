@@ -1,217 +1,189 @@
 """
-Solutions API + Code Execution Endpoint
+Solutions endpoints with code execution support
 """
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from typing import List, Optional
-import subprocess, sys, tempfile, os, json, time, asyncio, logging
+from typing import List
+import logging
 
 from app.db.database import get_db
-from app.db import models
-from app.schemas.problem import SolutionSubmit, SolutionTest, SolutionResponse
+from app.db.models import Solution, Problem
+from app.schemas.problem import (
+    SolutionSubmitSchema, SolutionTestSchema, SolutionResponseSchema
+)
+from app.services.code_executor import execute_code
+from app.middleware.error_handler import AppException
 
-router = APIRouter(prefix="/solutions", tags=["Solutions"])
 logger = logging.getLogger(__name__)
+router = APIRouter()
 
-# ─── Execute Endpoint ─────────────────────────────────────────
-execute_router = APIRouter(prefix="/execute", tags=["Execute"])
-
-EXEC_TIMEOUT = 10  # seconds
-
-
-def _run_python_code(code: str, test_cases: list) -> dict:
-    """
-    Run Python code against test cases in a subprocess sandbox.
-    Returns per-testcase results.
-    """
-    results = []
-    total_start = time.time()
-
-    for i, tc in enumerate(test_cases):
-        input_str = tc.get("input", "")
-        expected = tc.get("expected", None)
-
-        # Wrap code to capture output
-        runner = f"""
-import sys, io
-_captured = io.StringIO()
-sys.stdout = _captured
-
-{code}
-
-sys.stdout = sys.__stdout__
-_out = _captured.getvalue().strip()
-print(_out)
-"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(runner)
-            tmpfile = f.name
-
-        try:
-            start = time.time()
-            proc = subprocess.run(
-                [sys.executable, tmpfile],
-                input=input_str,
-                capture_output=True,
-                text=True,
-                timeout=EXEC_TIMEOUT,
-            )
-            elapsed_ms = round((time.time() - start) * 1000, 2)
-            stdout = proc.stdout.strip()
-            stderr = proc.stderr.strip()
-
-            passed = None
-            if expected is not None:
-                passed = str(stdout) == str(expected)
-
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "expected": str(expected) if expected is not None else None,
-                "actual": stdout,
-                "passed": passed,
-                "runtime_ms": elapsed_ms,
-                "error": stderr if stderr else None,
-            })
-        except subprocess.TimeoutExpired:
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "expected": str(expected) if expected is not None else None,
-                "actual": None,
-                "passed": False,
-                "runtime_ms": EXEC_TIMEOUT * 1000,
-                "error": "Time Limit Exceeded",
-            })
-        except Exception as e:
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "passed": False,
-                "error": str(e),
-                "runtime_ms": 0,
-            })
-        finally:
-            try:
-                os.unlink(tmpfile)
-            except Exception:
-                pass
-
-    total_ms = round((time.time() - total_start) * 1000, 2)
-    passed_count = sum(1 for r in results if r.get("passed") is True)
-    return {
-        "results": results,
-        "passed": passed_count,
-        "total": len(results),
-        "all_passed": passed_count == len(results),
-        "total_runtime_ms": total_ms,
-    }
-
-
-class ExecuteBody(SolutionTest):
-    test_cases: Optional[List[dict]] = []
-
-
-@execute_router.post("")
-async def execute_code(body: ExecuteBody):
-    """
-    Execute code against test cases.
-    Currently supports Python only.
-    Sandboxed via subprocess with timeout.
-    """
-    if body.language not in ("python3", "python"):
-        return {
-            "results": [],
-            "passed": 0,
-            "total": 0,
-            "all_passed": False,
-            "error": f"Language '{body.language}' not supported for execution. Python only.",
-        }
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,
-        _run_python_code,
-        body.code,
-        body.test_cases or [],
-    )
-    return result
-
-
-# ─── Solutions CRUD ───────────────────────────────────────────
-
-@router.post("/{problem_id}/submit", response_model=dict)
+@router.post("/{problem_id}/submit", response_model=SolutionResponseSchema)
 async def submit_solution(
-    problem_id: int,
-    body: SolutionSubmit,
-    db: AsyncSession = Depends(get_db),
+    problem_id: str,
+    user_id: str,
+    solution_data: SolutionSubmitSchema,
+    db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(models.Problem).where(models.Problem.id == problem_id))
-    problem = result.scalar_one_or_none()
-    if not problem:
-        raise HTTPException(status_code=404, detail="Problem not found")
-
-    sol = models.Solution(
-        problem_id=problem_id,
-        user_id=body.user_id or "demo-user",
-        code=body.code,
-        language=body.language,
-        explanation=body.explanation,
-    )
-    db.add(sol)
-    await db.commit()
-    await db.refresh(sol)
-    return {
-        "id": sol.id,
-        "problem_id": sol.problem_id,
-        "language": sol.language,
-        "created_at": sol.created_at.isoformat() if sol.created_at else None,
-        "message": "Solution saved",
-    }
-
+    """Submit a solution for a problem"""
+    try:
+        # Verify problem exists
+        result = await db.execute(select(Problem).where(Problem.id == problem_id))
+        problem = result.scalar_one_or_none()
+        
+        if not problem:
+            raise AppException("Problem not found", status_code=404)
+        
+        # Create solution record
+        solution = Solution(
+            user_id=user_id,
+            problem_id=problem_id,
+            code=solution_data.code,
+            language=solution_data.language,
+            explanation=solution_data.explanation,
+            approach=solution_data.approach,
+            time_complexity=solution_data.time_complexity,
+            space_complexity=solution_data.space_complexity
+        )
+        
+        # Run test cases if available
+        if problem.test_cases:
+            test_results = []
+            passed = 0
+            
+            for test_case in problem.test_cases:
+                try:
+                    result_data = await execute_code(
+                        solution_data.code,
+                        test_case["input"],
+                        solution_data.language
+                    )
+                    is_passed = result_data.get("output") == test_case["expected"]
+                    if is_passed:
+                        passed += 1
+                    test_results.append({
+                        "input": test_case["input"],
+                        "expected": test_case["expected"],
+                        "output": result_data.get("output"),
+                        "passed": is_passed,
+                        "error": result_data.get("error")
+                    })
+                except Exception as e:
+                    test_results.append({
+                        "input": test_case["input"],
+                        "expected": test_case["expected"],
+                        "passed": False,
+                        "error": str(e)
+                    })
+            
+            solution.passed_test_cases = passed
+            solution.total_test_cases = len(problem.test_cases)
+            solution.test_results = test_results
+        
+        db.add(solution)
+        await db.commit()
+        await db.refresh(solution)
+        
+        logger.info(f"Solution submitted: {solution.id}")
+        return solution
+    except AppException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error submitting solution: {str(e)}")
+        raise AppException("Failed to submit solution", status_code=500)
 
 @router.post("/{problem_id}/test")
-async def test_solution(problem_id: int, body: SolutionTest, db: AsyncSession = Depends(get_db)):
-    """Test solution without saving — runs code execution"""
-    if body.language not in ("python3", "python"):
-        return {"message": "Execution only available for Python currently"}
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _run_python_code, body.code, [])
-    return result
-
-
-@router.get("/user/{user_id}", response_model=List[dict])
-async def get_user_solutions(user_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(models.Solution).where(models.Solution.user_id == user_id)
-    )
-    solutions = result.scalars().all()
-    return [
-        {
-            "id": s.id,
-            "problem_id": s.problem_id,
-            "language": s.language,
-            "code": s.code,
-            "is_correct": s.is_correct,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
+async def test_solution(
+    problem_id: str,
+    test_data: SolutionTestSchema,
+    db: AsyncSession = Depends(get_db)
+):
+    """Test a solution without submitting"""
+    try:
+        results = []
+        passed = 0
+        
+        for test_case in test_data.test_cases:
+            try:
+                result = await execute_code(
+                    test_data.code,
+                    test_case.input,
+                    test_data.language,
+                    timeout=test_data.timeout
+                )
+                
+                is_passed = result.get("output") == test_case.expected
+                if is_passed:
+                    passed += 1
+                
+                results.append({
+                    "input": test_case.input,
+                    "expected": test_case.expected,
+                    "output": result.get("output"),
+                    "passed": is_passed,
+                    "error": result.get("error"),
+                    "execution_time": result.get("execution_time")
+                })
+            except Exception as e:
+                results.append({
+                    "input": test_case.input,
+                    "expected": test_case.expected,
+                    "passed": False,
+                    "error": str(e)
+                })
+        
+        return {
+            "success": True,
+            "total_test_cases": len(test_data.test_cases),
+            "passed_test_cases": passed,
+            "results": results
         }
-        for s in solutions
-    ]
+    except Exception as e:
+        logger.error(f"Error testing solution: {str(e)}")
+        raise AppException("Failed to test solution", status_code=500)
 
+@router.get("/user/{user_id}")
+async def get_user_solutions(
+    user_id: str,
+    problem_id: str = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user's solutions"""
+    try:
+        query = select(Solution).where(Solution.user_id == user_id)
+        
+        if problem_id:
+            query = query.where(Solution.problem_id == problem_id)
+        
+        query = query.offset(skip).limit(limit)
+        result = await db.execute(query)
+        solutions = result.scalars().all()
+        
+        return {"success": True, "data": solutions}
+    except Exception as e:
+        logger.error(f"Error fetching solutions: {str(e)}")
+        raise AppException("Failed to fetch solutions", status_code=500)
 
-@router.get("/{solution_id}", response_model=dict)
-async def get_solution(solution_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Solution).where(models.Solution.id == solution_id))
-    sol = result.scalar_one_or_none()
-    if not sol:
-        raise HTTPException(status_code=404, detail="Solution not found")
-    return {
-        "id": sol.id,
-        "problem_id": sol.problem_id,
-        "language": sol.language,
-        "code": sol.code,
-        "is_correct": sol.is_correct,
-        "created_at": sol.created_at.isoformat() if sol.created_at else None,
-    }
+@router.get("/{solution_id}")
+async def get_solution(
+    solution_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific solution"""
+    try:
+        result = await db.execute(select(Solution).where(Solution.id == solution_id))
+        solution = result.scalar_one_or_none()
+        
+        if not solution:
+            raise AppException("Solution not found", status_code=404)
+        
+        return {"success": True, "data": solution}
+    except AppException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching solution: {str(e)}")
+        raise AppException("Failed to fetch solution", status_code=500)

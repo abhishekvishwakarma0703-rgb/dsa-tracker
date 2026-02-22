@@ -1,3 +1,4 @@
+ 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 class APIClient {
@@ -110,52 +111,12 @@ class APIClient {
         }
         throw new Error(errorDetail);
       }
-// 204 No Content or empty body — return null instead of parsing
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-      return null;
-    }
+
       return await response.json();
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
       throw error;
     }
-  }
-// ========== LEETCODE MASTER ENDPOINTS ==========
-
-  async getLeetcodePublicProblem(slug) {
-    return this.fetch(`/leetcode-master/public/${slug}`);
-  }
-
-  /**
-   * Search the master LeetCode problem list
-   * GET /leetcode-master?search=two+sum&page=1&page_size=30
-   */
-  async searchLeetCodeMaster(search = '', page = 1, pageSize = 30, difficulty = '') {
-    const params = new URLSearchParams();
-    if (search)     params.append('search', search);
-    if (difficulty) params.append('difficulty', difficulty);
-    params.append('page', String(page));
-    params.append('page_size', String(pageSize));
-    return this.fetch(`/leetcode-master?${params.toString()}`);
-  }
-
-  /**
-   * Add a problem from master list into a user section
-   * POST /problems
-   */
-  async createProblemFromMaster(masterItem, sectionId) {
-    return this.fetch('/problems', {
-      method: 'POST',
-      body: JSON.stringify({
-        title:         masterItem.title,
-        difficulty:    masterItem.difficulty,
-        category:      (masterItem.topic_tags?.[0]?.name) || '',
-        section_id:    sectionId,
-        pattern:       '',
-        leetcode_id:   String(masterItem.question_id || ''),
-        leetcode_slug: masterItem.title_slug,
-      }),
-    });
   }
 
   // ========== PROBLEMS ENDPOINTS ==========

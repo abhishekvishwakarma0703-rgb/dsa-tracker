@@ -201,15 +201,7 @@ export function ProblemsProvider({ children }) {
       setError(err.message || 'Failed to update tag');
     }
   }, [refetchProblems]);
-// Delete a problem entirely (calls DELETE /problems/{id})
-  const deleteProblem = useCallback(async (sectionId, problemId) => {
-    await apiClient.deleteProblem(problemId);
-    setProblems(prev => prev.map(section =>
-      section.id === sectionId
-        ? { ...section, problems: section.problems.filter(p => p.id !== problemId) }
-        : section
-    ));
-  }, []);
+
   // Update insight (API: updateInsight)
   const updateInsight = useCallback(async (sectionId, problemId, insightId, text) => {
     try {
@@ -271,7 +263,6 @@ export function ProblemsProvider({ children }) {
 
   const value = {
     problems,
-    refetchProblems,
     filters,
     selectedProblem,
     loading,
@@ -290,7 +281,6 @@ export function ProblemsProvider({ children }) {
     removeTag,
     updateTag,
     updateInsight,
-    deleteProblem,
   };
 
   return <ProblemsContext.Provider value={value}>{children}</ProblemsContext.Provider>;
