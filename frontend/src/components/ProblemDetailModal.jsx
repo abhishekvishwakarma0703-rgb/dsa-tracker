@@ -8,6 +8,8 @@ import { RichTextEditor, sanitizeHtml } from '@/components/RichTextEditor';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { DiscussionPanel } from '@/components/DiscussionPanel';
+import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,12 +18,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  Check, RotateCcw, Lightbulb, Code2, Tag, X, Plus,
-  ExternalLink, Trash2, Clock, Info, BookOpen, ChevronDown,
-  PenTool, Activity
+  Check, RotateCcw, Lightbulb, Code2, Tag, X, Plus, MessageCircle,
+  ExternalLink, Trash2, Clock, Info, BookOpen, ChevronDown
 } from 'lucide-react';
-import { Whiteboard } from './Whiteboard';
-import { Visualization } from './Visualization';
 
 const DIFFICULTY_VARIANT = { Easy: 'easy', Medium: 'medium', Hard: 'hard' };
 
@@ -154,7 +153,7 @@ export function ProblemDetailModal({ problem, onClose, onSolve }) {
   const [pending, setPending] = useState(null);
   const [activeTab, setActiveTab] = useState('description');
 
-  const { data: lcData, loading: lcLoading } = useLeetcodeData(problem.title,problem.title_slug);
+  const { data: lcData, loading: lcLoading } = useLeetcodeData(problem.title);
 
   // Always sync modal with latest problem data from global state
   useEffect(() => {
@@ -201,16 +200,15 @@ export function ProblemDetailModal({ problem, onClose, onSolve }) {
     { id: 'description', label: 'Description', icon: BookOpen },
     { id: 'status', label: 'Status', icon: Check },
     { id: 'insights', label: `Insights (${problem.insights?.length || 0})`, icon: Lightbulb },
+    { id: 'discussion', label: `Discussion${problem.chat_count > 0 ? ` (${problem.chat_count})` : ''}`, icon: MessageCircle },
     { id: 'tags', label: `Tags (${problem.tags?.length || 0})`, icon: Tag },
     { id: 'info', label: 'Info', icon: Info },
-    { id: 'whiteboard', label: 'Whiteboard', icon: PenTool },
-    { id: 'visualization', label: 'Visualize', icon: Activity },
   ];
 
   if (showSolution) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[92vh] p-0 overflow-hidden">
+        <DialogContent className="max-w-3xl max-h-[90vh] p-0 overflow-hidden">
           <ScrollArea className="max-h-[90vh]">
             <SolutionView problem={problem} onBack={() => setShowSolution(false)} />
           </ScrollArea>
@@ -248,13 +246,7 @@ export function ProblemDetailModal({ problem, onClose, onSolve }) {
           </div>
         </DialogHeader>
 
-        {(activeTab === 'whiteboard' || activeTab === 'visualization') && (
-          <div className="flex-1 overflow-hidden" style={{height: '520px'}}>
-            {activeTab === 'whiteboard' && <Whiteboard problem={problem} />}
-            {activeTab === 'visualization' && <Visualization problem={problem} />}
-          </div>
-        )}
-        {(activeTab !== 'whiteboard' && activeTab !== 'visualization') && <ScrollArea className="flex-1 px-6 py-5">
+        <ScrollArea className="flex-1 px-6 py-5">
           {activeTab === 'description' && (
             <div className="space-y-4">
               {lcLoading ? <Skeleton className="h-32 w-full" /> : <ProblemDescription html={lcData?.contentHtml} />}
@@ -335,13 +327,18 @@ export function ProblemDetailModal({ problem, onClose, onSolve }) {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-muted-foreground">Pattern:</span> {problem.pattern || 'N/A'}</div>
               <div><span className="text-muted-foreground">Difficulty:</span> {problem.difficulty}</div>
-              {problem.leetcode_slug && <div><span className="text-muted-foreground">Slug:</span> {problem.leetcode_slug}</div>}
-              {problem.acceptance_rate > 0 && <div><span className="text-muted-foreground">Acceptance:</span> {problem.acceptance_rate?.toFixed(1)}%</div>}
             </div>
           )}
-        </ScrollArea>}
-      </DialogContent>
-    </Dialog>
+        </ScrollArea>
+
+      {/* Discussion tab */}
+      {activeTab === 'discussion' && (
+        <div style={{height: '400px', overflow: 'hidden'}}>
+          <DiscussionPanel problem={problem} currentUser={user} />
+        </div>
+      )}
+    </DialogContent>
+  </Dialog>
   );
 }
 

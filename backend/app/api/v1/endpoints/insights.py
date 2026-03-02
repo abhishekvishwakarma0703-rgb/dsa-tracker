@@ -1,80 +1,92 @@
 """
-Insights/Notes API Endpoints
+Insights endpoints — JWT-secured, per-user.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List
+import logging
 
 from app.db.database import get_db
-from app.db import models
-from app.schemas.problem import InsightCreate, NoteUpdate, NoteResponse
+from app.db.models import Insight, User
+from app.schemas.problem import InsightCreateSchema, InsightUpdateSchema, InsightResponseSchema
+from app.core.auth import get_current_user
+from app.middleware.error_handler import AppException
 
-router = APIRouter(prefix="/insights", tags=["Insights"])
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
 
-@router.post("/{problem_id}", response_model=NoteResponse, status_code=201)
+@router.post("/{problem_id}", response_model=InsightResponseSchema)
 async def create_insight(
-    problem_id: int,
-    data: InsightCreate,
-    user_id: Optional[str] = Query(default="demo-user"),
+    problem_id: str,
+    insight_data: InsightCreateSchema,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # Verify problem exists
-    result = await db.execute(select(models.Problem).where(models.Problem.id == problem_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Problem not found")
-
-    note = models.Note(
+    insight = Insight(
+        user_id=current_user.id,
         problem_id=problem_id,
-        text=data.text,
-        insight_type=data.insight_type,
-        user_id=user_id,
+        text=insight_data.text,
+        insight_type=insight_data.insight_type,
     )
-    db.add(note)
+    db.add(insight)
     await db.commit()
-    await db.refresh(note)
-    return note
+    await db.refresh(insight)
+    return insight
 
 
-@router.get("/{problem_id}", response_model=List[NoteResponse])
-async def get_problem_insights(problem_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/{problem_id}", response_model=List[InsightResponseSchema])
+async def get_problem_insights(
+    problem_id: str,
+    skip: int  = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return only THIS user's insights for the problem."""
     result = await db.execute(
-        select(models.Note)
-        .where(models.Note.problem_id == problem_id)
-        .order_by(models.Note.created_at.desc())
+        select(Insight)
+        .where(Insight.problem_id == problem_id, Insight.user_id == current_user.id)
+        .offset(skip).limit(limit)
     )
     return result.scalars().all()
 
 
-@router.get("/user/{user_id}", response_model=List[NoteResponse])
-async def get_user_insights(user_id: str, db: AsyncSession = Depends(get_db)):
+@router.put("/{insight_id}")
+async def update_insight(
+    insight_id: str,
+    insight_data: InsightUpdateSchema = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(models.Note).where(models.Note.user_id == user_id)
+        select(Insight).where(Insight.id == insight_id, Insight.user_id == current_user.id)
     )
-    return result.scalars().all()
-
-
-@router.put("/{insight_id}", response_model=NoteResponse)
-async def update_insight(insight_id: int, data: NoteUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Note).where(models.Note.id == insight_id))
-    note = result.scalar_one_or_none()
-    if not note:
-        raise HTTPException(status_code=404, detail="Insight not found")
-    if data.text is not None:
-        note.text = data.text
-    if data.insight_type is not None:
-        note.insight_type = data.insight_type
+    insight = result.scalar_one_or_none()
+    if not insight:
+        raise AppException("Insight not found", status_code=404)
+    if insight_data.text is not None:
+        insight.text = insight_data.text
+    if insight_data.insight_type is not None:
+        insight.insight_type = insight_data.insight_type
     await db.commit()
-    await db.refresh(note)
-    return note
+    await db.refresh(insight)
+    return {"success": True, "data": InsightResponseSchema.model_validate(insight)}
 
 
-@router.delete("/{insight_id}", status_code=204)
-async def delete_insight(insight_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Note).where(models.Note.id == insight_id))
-    note = result.scalar_one_or_none()
-    if not note:
-        raise HTTPException(status_code=404, detail="Insight not found")
-    await db.delete(note)
+@router.delete("/{insight_id}")
+async def delete_insight(
+    insight_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Insight).where(Insight.id == insight_id, Insight.user_id == current_user.id)
+    )
+    insight = result.scalar_one_or_none()
+    if not insight:
+        raise AppException("Insight not found", status_code=404)
+    await db.delete(insight)
     await db.commit()
+    return {"success": True}

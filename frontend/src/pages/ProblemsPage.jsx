@@ -1,33 +1,33 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useProblems } from '@/context/ProblemsContext';
+import { useAuth } from '@/hooks/useAuth';
 import { ProblemSection } from '@/components/ProblemSection';
-import { ProblemDetailModal } from '@/components/ProblemDetailModal';
 import { CodeEditor } from '@/components/CodeEditor';
-import { AddFromMasterModal } from '@/components/AddFromMasterModal';
 import { Progress } from '@/components/ui/progress';
-import { CircularProgress } from '@/components/ui/circular-progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { NotificationBell } from '@/components/NotificationBell';
 import {
   Search, X, CheckCircle2, RotateCcw, BookOpen, TrendingUp,
-  Filter, Sun, Moon, AlertCircle, RefreshCw, Plus
+  Filter, Sun, Moon, AlertCircle, RefreshCw, LogOut, User as UserIcon, ShieldCheck
 } from 'lucide-react';
 
-function StatsCard({ icon: Icon, label, value, sub, className }) {
+// --- Sub-components ---
+
+function StatsCard({ icon: Icon, label, value, className, colorClass }) {
   return (
-    <div className={cn('rounded-xl border bg-card p-5', className)}>
+    <div className={cn('rounded-xl border bg-card p-5 shadow-sm', className)}>
       <div className="flex items-center justify-between mb-3">
-        <div className="rounded-lg bg-muted p-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <div className={cn('rounded-lg p-2', colorClass || 'bg-muted')}>
+          <Icon className="h-4 w-4" />
         </div>
       </div>
       <div className="text-2xl font-bold">{value}</div>
-      <div className="text-sm text-muted-foreground mt-0.5">{label}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+      <div className="text-xs text-muted-foreground mt-1 uppercase tracking-wider font-medium">{label}</div>
     </div>
   );
 }
@@ -36,11 +36,11 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="rounded-xl border bg-card p-5">
+        <div key={i} className="rounded-xl border bg-card p-6">
           <div className="flex items-center gap-4">
-            <Skeleton className="h-4 w-4 rounded" />
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-1.5 w-32 ml-auto" />
+            <Skeleton className="h-5 w-5 rounded" />
+            <Skeleton className="h-5 w-64" />
+            <Skeleton className="h-2 w-24 ml-auto" />
           </div>
         </div>
       ))}
@@ -48,20 +48,28 @@ function LoadingSkeleton() {
   );
 }
 
+// --- Main Component ---
+
 export function ProblemsPage() {
-  const { problems, filters, setFilters, selectedProblem, setSelectedProblem, loading, error, refetchProblems } = useProblems();
+  const { user, logout, isAdmin } = useAuth();
+  const { problems, filters, setFilters, selectedProblem, setSelectedProblem, loading, error,toggleDone,toggleRevision,deleteProblem } = useProblems();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [solveMode, setSolveMode] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
+
+  // Theme Sync
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
     localStorage.setItem('theme', next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
   };
 
+  // Stats Calculation
   const stats = useMemo(() => {
     let total = 0, done = 0, revision = 0;
     problems.forEach((s) => {
@@ -69,11 +77,15 @@ export function ProblemsPage() {
       done += s.problems.filter((p) => p.done).length;
       revision += s.problems.filter((p) => p.revision).length;
     });
-    return { total, done, revision, progress: total > 0 ? Math.round((done / total) * 100) : 0 };
+    return { 
+      total, 
+      done, 
+      revision, 
+      progress: total > 0 ? Math.round((done / total) * 100) : 0 
+    };
   }, [problems]);
 
-  const hasFilters = searchTerm || filters.difficulty !== 'All' || filters.status !== 'All';
-
+  // Filtering Logic
   const filteredProblems = useMemo(() => {
     return problems
       .map((section) => ({
@@ -97,247 +109,171 @@ export function ProblemsPage() {
     setFilters({ difficulty: 'All', status: 'All', category: 'All', searchTerm: '' });
   };
 
+  const hasFilters = searchTerm || filters.difficulty !== 'All' || filters.status !== 'All';
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
       <div className="flex h-screen overflow-hidden">
+        
+        {/* SIDEBAR */}
+        <aside className="w-68 shrink-0 border-r bg-card flex flex-col hidden lg:flex">
+          {/* Logo Section */}
+          <div className="px-6 py-6 border-b flex items-center gap-3">
+            <div className="rounded-lg bg-primary p-2">
+              <BookOpen className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="font-bold text-sm leading-none">DSA Tracker</h1>
+              <p className="text-[10px] text-muted-foreground mt-1">Master the Grind</p>
+            </div>
+          </div>
 
-        {/* ── Sidebar ── */}
-        <aside className="w-64 shrink-0 border-r bg-card flex flex-col hidden lg:flex">
-          {/* Logo */}
-          <div className="px-6 py-5 border-b">
-            <div className="flex items-center gap-2.5">
-              <div className="rounded-lg bg-primary/10 p-1.5">
-                <BookOpen className="h-5 w-5 text-primary" />
+          {/* User Profile Info */}
+          <div className="px-5 py-5 border-b bg-muted/20">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                <UserIcon className="h-5 w-5 text-primary" />
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{user?.username || 'User'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+              </div>
+            </div>
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="w-full h-8 text-[11px] gap-2 border-amber-500/30 text-amber-600 hover:bg-amber-50" asChild>
+                <a href="/admin"><ShieldCheck className="h-3.5 w-3.5" /> Admin Panel</a>
+              </Button>
+            )}
+          </div>
+
+          {/* Sidebar Navigation / Filters */}
+          <ScrollArea className="flex-1 px-4 py-4">
+            <div className="space-y-6">
               <div>
-                <h1 className="font-bold text-sm">DSA Tracker</h1>
-                <p className="text-[11px] text-muted-foreground">Problem Tracker</p>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-3 px-2">Status</p>
+                <div className="space-y-1">
+                  {[
+                    { label: 'All Problems', value: 'All', icon: BookOpen },
+                    { label: 'Solved', value: 'Done', icon: CheckCircle2 },
+                    { label: 'Revision', value: 'Revision', icon: RotateCcw },
+                    { label: 'Pending', value: 'Pending', icon: TrendingUp },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      onClick={() => setFilters({ ...filters, status: item.value })}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all',
+                        filters.status === item.value 
+                          ? 'bg-primary text-primary-foreground shadow-md' 
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-3 px-2">Difficulty</p>
+                <div className="space-y-1">
+                  {['All', 'Easy', 'Medium', 'Hard'].map((diff) => (
+                    <button
+                      key={diff}
+                      onClick={() => setFilters({ ...filters, difficulty: diff })}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all',
+                        filters.difficulty === diff ? 'bg-muted font-medium border' : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {diff}
+                      {diff !== 'All' && (
+                        <span className={cn(
+                          'w-2 h-2 rounded-full',
+                          diff === 'Easy' ? 'bg-emerald-500' : diff === 'Medium' ? 'bg-amber-500' : 'bg-red-500'
+                        )} />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          </ScrollArea>
 
-          {/* Progress Summary */}
-          <div className="px-5 py-5 border-b">
-            <CircularProgress
-              value={stats.progress}
-              size={130}
-              strokeWidth={11}
-              sublabel="Progress"
-              className="mx-auto mb-4"
-            />
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-muted/60 p-2">
-                <div className="text-base font-bold">{stats.total}</div>
-                <div className="text-[10px] text-muted-foreground">Total</div>
-              </div>
-              <div className="rounded-lg bg-success/10 p-2">
-                <div className="text-base font-bold text-success">{stats.done}</div>
-                <div className="text-[10px] text-muted-foreground">Done</div>
-              </div>
-              <div className="rounded-lg bg-warning/10 p-2">
-                <div className="text-base font-bold text-warning">{stats.revision}</div>
-                <div className="text-[10px] text-muted-foreground">Review</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Filters */}
-          <div className="px-5 py-4 flex-1 overflow-y-auto">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 font-medium">Quick Filter</p>
-            <div className="space-y-1">
-              {[
-                { label: 'All Problems', value: 'All', status: 'All', icon: BookOpen },
-                { label: 'Completed', value: 'All', status: 'Done', icon: CheckCircle2 },
-                { label: 'In Revision', value: 'All', status: 'Revision', icon: RotateCcw },
-                { label: 'Pending', value: 'All', status: 'Pending', icon: TrendingUp },
-              ].map((item) => (
-                <button
-                  key={item.status}
-                  onClick={() => setFilters({ ...filters, status: item.status })}
-                  className={cn(
-                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left',
-                    filters.status === item.status
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 mt-6 font-medium">Difficulty</p>
-            <div className="space-y-1">
-              {['All', 'Easy', 'Medium', 'Hard'].map((diff) => (
-                <button
-                  key={diff}
-                  onClick={() => setFilters({ ...filters, difficulty: diff })}
-                  className={cn(
-                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left',
-                    filters.difficulty === diff
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  {diff !== 'All' && (
-                    <span className={cn(
-                      'w-2 h-2 rounded-full shrink-0',
-                      diff === 'Easy' && 'bg-emerald-500',
-                      diff === 'Medium' && 'bg-amber-500',
-                      diff === 'Hard' && 'bg-red-500',
-                    )} />
-                  )}
-                  {diff === 'All' && <span className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground/50" />}
-                  {diff === 'All' ? 'All Difficulties' : diff}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sidebar Footer — Add Problem + Theme */}
-          <div className="px-5 py-4 border-t space-y-2">
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Add Problem
-            </button>
-            <button
-              onClick={toggleTheme}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
-            >
-              {theme === 'light'
-                ? <><Moon className="h-4 w-4" />Dark Mode</>
-                : <><Sun className="h-4 w-4" />Light Mode</>
-              }
-            </button>
+          {/* Sidebar Footer */}
+          <div className="p-4 border-t space-y-2">
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-3 text-muted-foreground h-9" onClick={toggleTheme}>
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 h-9" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
           </div>
         </aside>
 
-        {/* ── Main Content ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Topbar */}
-          <header className="shrink-0 border-b bg-card px-6 py-3.5 flex items-center gap-4">
-            <div className="relative flex-1 max-w-lg">
+        {/* MAIN CONTENT AREA */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-muted/5">
+          {/* Header */}
+          <header className="h-16 shrink-0 border-b bg-card flex items-center justify-between px-8">
+            <div className="relative w-full max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9 pr-9 h-9"
-                placeholder="Search problems..."
+              <Input 
+                className="pl-10 bg-muted/40 border-none focus-visible:ring-1" 
+                placeholder="Search problems by name..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
-              {searchTerm && (
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setSearchTerm('')}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
             </div>
-
-            {/* Mobile filters */}
-            <div className="flex items-center gap-2 lg:hidden">
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={filters.difficulty}
-                onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })}
-              >
-                {['All', 'Easy', 'Medium', 'Hard'].map(d => <option key={d}>{d}</option>)}
-              </select>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              >
-                {['All', 'Done', 'Revision', 'Pending'].map(s => <option key={s}>{s}</option>)}
-              </select>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="h-9 flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Add
-              </button>
+            
+            <div className="flex items-center gap-4">
+               <div className="text-right hidden sm:block">
+                 <p className="text-[10px] uppercase font-bold text-muted-foreground">Overall Mastery</p>
+                 <p className="text-sm font-bold text-primary">{stats.progress}% Completed</p>
+               </div>
+               <Progress value={stats.progress} className="w-24 h-1.5 hidden sm:block" />
             </div>
-
-            {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                <X className="h-4 w-4" />
-                Clear
-              </Button>
-            )}
           </header>
 
-          {/* Content */}
+          {/* Scrollable Content */}
           <ScrollArea className="flex-1">
-            <main className="p-6 max-w-4xl mx-auto">
-              {/* Mobile stats */}
-              <div className="grid grid-cols-2 gap-3 mb-6 lg:hidden">
-                <StatsCard icon={BookOpen} label="Total" value={stats.total} />
-                <StatsCard icon={CheckCircle2} label="Completed" value={stats.done} />
-                <StatsCard icon={RotateCcw} label="Revision" value={stats.revision} />
-                <StatsCard icon={TrendingUp} label="Progress" value={`${stats.progress}%`} />
+            <main className="p-8 max-w-5xl mx-auto w-full">
+              
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                <StatsCard icon={BookOpen} label="Total Problems" value={stats.total} />
+                <StatsCard icon={CheckCircle2} label="Solved" value={stats.done} colorClass="bg-emerald-100 text-emerald-600" />
+                <StatsCard icon={RotateCcw} label="Needs Revision" value={stats.revision} colorClass="bg-amber-100 text-amber-600" />
+                <StatsCard icon={TrendingUp} label="Progress" value={`${stats.progress}%`} colorClass="bg-blue-100 text-blue-600" />
               </div>
 
-              {/* Active filter badges */}
-              {hasFilters && (
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Filter className="h-3 w-3" /> Filters:
-                  </span>
-                  {searchTerm && (
-                    <Badge variant="secondary" className="gap-1 text-xs">
-                      "{searchTerm}"
-                      <button onClick={() => setSearchTerm('')}><X className="h-2.5 w-2.5" /></button>
-                    </Badge>
-                  )}
-                  {filters.difficulty !== 'All' && (
-                    <Badge variant="secondary" className="gap-1 text-xs">
-                      {filters.difficulty}
-                      <button onClick={() => setFilters({ ...filters, difficulty: 'All' })}><X className="h-2.5 w-2.5" /></button>
-                    </Badge>
-                  )}
-                  {filters.status !== 'All' && (
-                    <Badge variant="secondary" className="gap-1 text-xs">
-                      {filters.status}
-                      <button onClick={() => setFilters({ ...filters, status: 'All' })}><X className="h-2.5 w-2.5" /></button>
-                    </Badge>
-                  )}
-                  <span className="text-xs text-muted-foreground ml-1">
-                    {filteredProblems.reduce((acc, s) => acc + s.problems.length, 0)} results
-                  </span>
+              {/* Title & Filter Badges */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Curated DSA Sheet</h2>
+                  <p className="text-sm text-muted-foreground">Focus on quality over quantity. Master these patterns.</p>
                 </div>
-              )}
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4 mr-1" /> Clear Filters
+                  </Button>
+                )}
+              </div>
 
-              {/* Problem list */}
+              {/* Problem Sections */}
               {loading ? (
                 <LoadingSkeleton />
               ) : error ? (
-                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-8 text-center">
-                  <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-3" />
-                  <h3 className="font-semibold mb-1">Failed to load problems</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                    <RefreshCw className="h-4 w-4" />
-                    Retry
-                  </Button>
-                </div>
-              ) : filteredProblems.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-12 text-center">
-                  <Search className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <h3 className="font-semibold mb-1">No problems found</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Try adjusting your search or filters
-                  </p>
-                  <Button variant="outline" size="sm" onClick={resetFilters}>
-                    Clear all filters
-                  </Button>
+                <div className="text-center py-20 border rounded-xl bg-card">
+                  <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold">Database Connection Error</h3>
+                  <p className="text-muted-foreground mb-6">{error}</p>
+                  <Button onClick={() => window.location.reload()}><RefreshCw className="mr-2 h-4 w-4" /> Retry Connection</Button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {filteredProblems.map((section) => (
                     <ProblemSection
                       key={section.id}
@@ -346,12 +282,16 @@ export function ProblemsPage() {
                         setSelectedProblem({ ...problem, sectionId });
                         if (mode === 'solve') setSolveMode(true);
                       }}
-                      isExpanded={
-                        !!(searchTerm ||
-                        filters.difficulty !== 'All' ||
-                        filters.status !== 'All' ||
-                        (selectedProblem && selectedProblem.sectionId === section.id))
-                      }
+                      onToggleDone={(problemId, sectionId) => {
+                        toggleDone(problemId, sectionId);
+                      }}
+                      onToggleRevision={(problemId, sectionId) => {
+                        toggleRevision(problemId, sectionId);
+                      }}
+                      onDelete={(problemId, sectionId) => {
+                        deleteProblem(problemId, sectionId);
+                      }}
+                      isExpanded={hasFilters}
                     />
                   ))}
                 </div>
@@ -361,33 +301,22 @@ export function ProblemsPage() {
         </div>
       </div>
 
-      {/* ── Modals ── */}
-      {selectedProblem && !solveMode && (
+      {/* Modals */}
+      {/* {selectedProblem && !solveMode && (
         <ProblemDetailModal
           problem={selectedProblem}
           onClose={() => setSelectedProblem(null)}
           onSolve={() => setSolveMode(true)}
         />
-      )}
-      
-      {selectedProblem && solveMode && (
-        <div className="fixed inset-0 z-50 bg-background overflow-auto">
-          <CodeEditor
-            problem={selectedProblem}
-            onBack={() => {
-              setSolveMode(false);
-              setSelectedProblem(null);
-            }}
-          />
-        </div>
-      )}
+      )} */}
 
-      {showAddModal && (
-        <AddFromMasterModal
-          open={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          sections={problems}
-          onAdded={() => { refetchProblems?.(); setShowAddModal(false); }}
+      {selectedProblem  && (
+        <CodeEditor
+          problem={selectedProblem}
+          onBack={() => {
+            setSolveMode(false);
+            setSelectedProblem(null);
+          }}
         />
       )}
     </div>

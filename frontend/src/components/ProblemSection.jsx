@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Plus } from 'lucide-react';
 import { AddFromMasterModal } from './AddFromMasterModal';
 
-export function ProblemSection({ section, onSelectProblem, isExpanded: externalExpanded }) {
-  const { getSectionStats, refetchProblems } = useProblems(); // ✏️ CHANGED: added refetchProblems
+export function ProblemSection({ section, onSelectProblem,onToggleDone, onToggleRevision, onDelete,isExpanded: externalExpanded }) {
+  const { getSectionStats, refetchProblems } = useProblems();
   const [showAddModal, setShowAddModal] = useState(false);
+  
   const [isExpanded, setIsExpanded] = useState(
     typeof externalExpanded === 'boolean' ? externalExpanded : false
   );
@@ -28,11 +29,12 @@ export function ProblemSection({ section, onSelectProblem, isExpanded: externalE
       'rounded-xl border bg-card transition-all duration-200',
       isExpanded && 'shadow-sm'
     )}>
-      {/* ✏️ CHANGED: header row is now a flex container so Add button sits inline */}
+      {/* ── Section Header row: toggle + Add button side-by-side ── */}
       <div className="flex items-center">
-        {/* Section Header button — takes all space except Add button */}
+
+        {/* Toggle button — takes all remaining space */}
         <button
-          className="flex-1 text-left p-5 flex items-center gap-4 group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl"
+          className="flex-1 text-left p-5 flex items-center gap-4 group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl min-w-0"
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
         >
@@ -89,14 +91,16 @@ export function ProblemSection({ section, onSelectProblem, isExpanded: externalE
           </div>
         </button>
 
-        {/* ✏️ CHANGED: Add button outside the toggle button — no more ml-auto positioning issue */}
+        {/* ── Add button — sits in the header row, never inside the toggle button ── */}
         <button
           onClick={e => { e.stopPropagation(); setShowAddModal(true); }}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-3 py-1.5 mr-3 rounded hover:bg-muted shrink-0"
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary
+                     hover:bg-primary/8 border border-transparent hover:border-primary/20
+                     transition-all px-3 py-1.5 mr-4 rounded-lg shrink-0"
           title="Add problem to this section"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add 
+          <span className="hidden sm:inline">Add</span>
         </button>
       </div>
 
@@ -114,7 +118,10 @@ export function ProblemSection({ section, onSelectProblem, isExpanded: externalE
                   key={problem.id}
                   problem={problem}
                   sectionId={section.id}
-                  onSelect={(p, sid, mode) => onSelectProblem?.(p, sid, mode)}
+                  onSelect={onSelectProblem}
+                  onToggleDone={onToggleDone}
+                  onToggleRevision={onToggleRevision}
+                  onDelete={onDelete}
                 />
               ))}
             </div>
@@ -122,13 +129,13 @@ export function ProblemSection({ section, onSelectProblem, isExpanded: externalE
         </div>
       )}
 
-      {/* ✏️ CHANGED: sectionId passed so modal skips dropdown and adds directly to this section */}
       {showAddModal && (
         <AddFromMasterModal
           open={showAddModal}
           onClose={() => setShowAddModal(false)}
           sections={null}
           sectionId={section.id}
+          category ={section.category}
           onAdded={() => { refetchProblems?.(); setShowAddModal(false); }}
         />
       )}

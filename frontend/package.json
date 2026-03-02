@@ -4,12 +4,12 @@
   "description": "DSA Problem Tracker - shadcn/ui + LeetCode integration + Python IDE",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
+    "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-progress": "^1.0.3",
@@ -21,10 +21,13 @@
     "@radix-ui/react-tooltip": "^1.0.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.446.0",
+    "lucide-react": "^0.344.0",
+    "pyodide": "^0.29.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwind-merge": "^2.2.1"
+    "react-router-dom": "^7.13.1",
+    "tailwind-merge": "^2.2.1",
+    "socket.io-client": "^4.7.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

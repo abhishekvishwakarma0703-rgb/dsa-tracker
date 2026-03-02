@@ -10,7 +10,7 @@ import apiClient from '@/services/apiClient';
 
 const DIFF_COLOR = { Easy: 'text-emerald-600 bg-emerald-50', Medium: 'text-amber-600 bg-amber-50', Hard: 'text-red-600 bg-red-50' };
 
-export function AddFromMasterModal({ open, onClose, sections, onAdded, sectionId }) {
+export function AddFromMasterModal({ open, onClose, sections, onAdded, sectionId,category }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ export function AddFromMasterModal({ open, onClose, sections, onAdded, sectionId
     setAdding(true);
     setError('');
     try {
-      const result = await apiClient.createProblemFromMaster(selected, section);
+      const result = await apiClient.addFromMaster(selected,category);
       onAdded?.(result);
       onClose();
     } catch (e) {

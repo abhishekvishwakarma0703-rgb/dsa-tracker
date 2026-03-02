@@ -1,217 +1,171 @@
 """
-Solutions API + Code Execution Endpoint
+Solutions endpoints — JWT-secured, versioned submissions, autosave.
 """
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from typing import List, Optional
-import subprocess, sys, tempfile, os, json, time, asyncio, logging
+from sqlalchemy import select, func as sql_func
+from typing import List
+import logging
 
 from app.db.database import get_db
-from app.db import models
-from app.schemas.problem import SolutionSubmit, SolutionTest, SolutionResponse
+from app.db.models import Solution, Problem, UserProblem, User
+from app.schemas.problem import SolutionSubmitSchema, SolutionTestSchema, SolutionResponseSchema
+from app.services.code_executor import execute_code
+from app.core.auth import get_current_user
+from app.middleware.error_handler import AppException
 
-router = APIRouter(prefix="/solutions", tags=["Solutions"])
 logger = logging.getLogger(__name__)
-
-# ─── Execute Endpoint ─────────────────────────────────────────
-execute_router = APIRouter(prefix="/execute", tags=["Execute"])
-
-EXEC_TIMEOUT = 10  # seconds
+router = APIRouter()
 
 
-def _run_python_code(code: str, test_cases: list) -> dict:
-    """
-    Run Python code against test cases in a subprocess sandbox.
-    Returns per-testcase results.
-    """
-    results = []
-    total_start = time.time()
-
-    for i, tc in enumerate(test_cases):
-        input_str = tc.get("input", "")
-        expected = tc.get("expected", None)
-
-        # Wrap code to capture output
-        runner = f"""
-import sys, io
-_captured = io.StringIO()
-sys.stdout = _captured
-
-{code}
-
-sys.stdout = sys.__stdout__
-_out = _captured.getvalue().strip()
-print(_out)
-"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(runner)
-            tmpfile = f.name
-
-        try:
-            start = time.time()
-            proc = subprocess.run(
-                [sys.executable, tmpfile],
-                input=input_str,
-                capture_output=True,
-                text=True,
-                timeout=EXEC_TIMEOUT,
-            )
-            elapsed_ms = round((time.time() - start) * 1000, 2)
-            stdout = proc.stdout.strip()
-            stderr = proc.stderr.strip()
-
-            passed = None
-            if expected is not None:
-                passed = str(stdout) == str(expected)
-
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "expected": str(expected) if expected is not None else None,
-                "actual": stdout,
-                "passed": passed,
-                "runtime_ms": elapsed_ms,
-                "error": stderr if stderr else None,
-            })
-        except subprocess.TimeoutExpired:
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "expected": str(expected) if expected is not None else None,
-                "actual": None,
-                "passed": False,
-                "runtime_ms": EXEC_TIMEOUT * 1000,
-                "error": "Time Limit Exceeded",
-            })
-        except Exception as e:
-            results.append({
-                "test_case": i + 1,
-                "input": input_str,
-                "passed": False,
-                "error": str(e),
-                "runtime_ms": 0,
-            })
-        finally:
-            try:
-                os.unlink(tmpfile)
-            except Exception:
-                pass
-
-    total_ms = round((time.time() - total_start) * 1000, 2)
-    passed_count = sum(1 for r in results if r.get("passed") is True)
-    return {
-        "results": results,
-        "passed": passed_count,
-        "total": len(results),
-        "all_passed": passed_count == len(results),
-        "total_runtime_ms": total_ms,
-    }
-
-
-class ExecuteBody(SolutionTest):
-    test_cases: Optional[List[dict]] = []
-
-
-@execute_router.post("")
-async def execute_code(body: ExecuteBody):
-    """
-    Execute code against test cases.
-    Currently supports Python only.
-    Sandboxed via subprocess with timeout.
-    """
-    if body.language not in ("python3", "python"):
-        return {
-            "results": [],
-            "passed": 0,
-            "total": 0,
-            "all_passed": False,
-            "error": f"Language '{body.language}' not supported for execution. Python only.",
-        }
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,
-        _run_python_code,
-        body.code,
-        body.test_cases or [],
+async def _next_version(db: AsyncSession, user_id: str, problem_id: str) -> int:
+    """Return next version number for this user+problem."""
+    result = await db.execute(
+        select(sql_func.max(Solution.version_number)).where(
+            Solution.user_id    == user_id,
+            Solution.problem_id == problem_id,
+        )
     )
-    return result
+    max_ver = result.scalar()
+    return (max_ver or 0) + 1
 
 
-# ─── Solutions CRUD ───────────────────────────────────────────
-
-@router.post("/{problem_id}/submit", response_model=dict)
+@router.post("/{problem_id}/submit", response_model=SolutionResponseSchema)
 async def submit_solution(
-    problem_id: int,
-    body: SolutionSubmit,
+    problem_id: str,
+    solution_data: SolutionSubmitSchema,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(models.Problem).where(models.Problem.id == problem_id))
+    """Submit a solution. Creates versioned record; runs test cases if available."""
+    result = await db.execute(select(Problem).where(Problem.id == problem_id))
     problem = result.scalar_one_or_none()
     if not problem:
-        raise HTTPException(status_code=404, detail="Problem not found")
+        raise AppException("Problem not found", status_code=404)
 
-    sol = models.Solution(
-        problem_id=problem_id,
-        user_id=body.user_id or "demo-user",
-        code=body.code,
-        language=body.language,
-        explanation=body.explanation,
+    version = await _next_version(db, current_user.id, problem_id)
+
+    solution = Solution(
+        user_id        = current_user.id,
+        problem_id     = problem_id,
+        code           = solution_data.code,
+        language       = solution_data.language,
+        explanation    = solution_data.explanation,
+        approach       = solution_data.approach,
+        time_complexity  = solution_data.time_complexity,
+        space_complexity = solution_data.space_complexity,
+        version_number = version,
     )
-    db.add(sol)
+
+    # Run test cases
+    if problem.test_cases:
+        test_results = []
+        passed = 0
+        for tc in problem.test_cases:
+            try:
+                res = await execute_code(solution_data.code, tc["input"], solution_data.language)
+                ok  = str(res.get("output", "")).strip() == str(tc["expected"]).strip()
+                if ok:
+                    passed += 1
+                test_results.append({
+                    "input":    tc["input"],
+                    "expected": tc["expected"],
+                    "output":   res.get("output"),
+                    "passed":   ok,
+                    "error":    res.get("error"),
+                    "execution_time": res.get("execution_time"),
+                })
+            except Exception as e:
+                test_results.append({"input": tc["input"], "expected": tc["expected"], "passed": False, "error": str(e)})
+
+        solution.passed_test_cases = passed
+        solution.total_test_cases  = len(problem.test_cases)
+        solution.test_results      = test_results
+
+    db.add(solution)
+
+    # Mark user_problem as attempted
+    up_res = await db.execute(
+        select(UserProblem).where(
+            UserProblem.user_id    == current_user.id,
+            UserProblem.problem_id == problem_id,
+        )
+    )
+    up = up_res.scalar_one_or_none()
+    if up:
+        from datetime import datetime
+        up.last_attempted_at = datetime.utcnow()
+        if not up.first_attempted_at:
+            up.first_attempted_at = datetime.utcnow()
+
     await db.commit()
-    await db.refresh(sol)
-    return {
-        "id": sol.id,
-        "problem_id": sol.problem_id,
-        "language": sol.language,
-        "created_at": sol.created_at.isoformat() if sol.created_at else None,
-        "message": "Solution saved",
-    }
+    await db.refresh(solution)
+    logger.info(f"Solution v{version} submitted by {current_user.username} for problem {problem_id}")
+    return solution
 
 
 @router.post("/{problem_id}/test")
-async def test_solution(problem_id: int, body: SolutionTest, db: AsyncSession = Depends(get_db)):
-    """Test solution without saving — runs code execution"""
-    if body.language not in ("python3", "python"):
-        return {"message": "Execution only available for Python currently"}
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _run_python_code, body.code, [])
-    return result
+async def test_solution(
+    problem_id: str,
+    test_data: SolutionTestSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run code against provided test cases without saving."""
+    results = []
+    passed  = 0
+    for tc in test_data.test_cases:
+        try:
+            res  = await execute_code(test_data.code, tc.input, test_data.language, timeout=test_data.timeout)
+            ok   = str(res.get("output", "")).strip() == str(tc.expected).strip()
+            if ok:
+                passed += 1
+            results.append({
+                "input":    tc.input,
+                "expected": tc.expected,
+                "output":   res.get("output"),
+                "passed":   ok,
+                "error":    res.get("error"),
+                "execution_time": res.get("execution_time"),
+            })
+        except Exception as e:
+            results.append({"input": tc.input, "expected": tc.expected, "passed": False, "error": str(e)})
+
+    return {"success": True, "total_test_cases": len(test_data.test_cases), "passed_test_cases": passed, "results": results}
 
 
-@router.get("/user/{user_id}", response_model=List[dict])
-async def get_user_solutions(user_id: str, db: AsyncSession = Depends(get_db)):
+@router.get("/me/history")
+async def get_my_solutions(
+    problem_id: str = Query(None),
+    skip: int  = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get current user's submission history (optionally filtered by problem)."""
+    query = select(Solution).where(Solution.user_id == current_user.id)
+    if problem_id:
+        query = query.where(Solution.problem_id == problem_id)
+    query = query.order_by(Solution.created_at.desc()).offset(skip).limit(limit)
+    result  = await db.execute(query)
+    sols    = result.scalars().all()
+    return {"success": True, "data": [SolutionResponseSchema.model_validate(s) for s in sols]}
+
+
+@router.get("/{solution_id}", response_model=SolutionResponseSchema)
+async def get_solution(
+    solution_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(models.Solution).where(models.Solution.user_id == user_id)
+        select(Solution).where(
+            Solution.id      == solution_id,
+            Solution.user_id == current_user.id,   # enforce ownership
+        )
     )
-    solutions = result.scalars().all()
-    return [
-        {
-            "id": s.id,
-            "problem_id": s.problem_id,
-            "language": s.language,
-            "code": s.code,
-            "is_correct": s.is_correct,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-        }
-        for s in solutions
-    ]
-
-
-@router.get("/{solution_id}", response_model=dict)
-async def get_solution(solution_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Solution).where(models.Solution.id == solution_id))
-    sol = result.scalar_one_or_none()
-    if not sol:
-        raise HTTPException(status_code=404, detail="Solution not found")
-    return {
-        "id": sol.id,
-        "problem_id": sol.problem_id,
-        "language": sol.language,
-        "code": sol.code,
-        "is_correct": sol.is_correct,
-        "created_at": sol.created_at.isoformat() if sol.created_at else None,
-    }
+    solution = result.scalar_one_or_none()
+    if not solution:
+        raise AppException("Solution not found", status_code=404)
+    return solution
